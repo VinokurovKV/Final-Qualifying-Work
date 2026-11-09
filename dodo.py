@@ -1,4 +1,4 @@
-"""Короткие команды запуска. Набор требований текущего теста задаётся здесь."""
+"""Короткие команды запуска для полного файла требований."""
 
 import shutil
 import subprocess
@@ -6,11 +6,6 @@ import sys
 
 
 REQUIREMENTS = "requirements/GRE_RFC2784.json"
-ATOMIC_CODES = [
-    "GRE-VERSION-NUMBER.1",
-    "GRE-RESERVED0-BITS.1",
-    "GRE-PROTOCOL-TYPE.1",
-]
 OUTPUT_DIR = "outputs/requirements_to_description"
 
 DOIT_CONFIG = {
@@ -22,11 +17,10 @@ DOIT_CONFIG = {
 
 
 def _run(no_llm: bool) -> bool:
-    filename = "draft.md" if no_llm else "gre_encap.md"
+    folder = "draft" if no_llm else "generated"
     command = [
         sys.executable, "-B", "main.py", REQUIREMENTS,
-        "--atomic", *ATOMIC_CODES,
-        "--output", f"{OUTPUT_DIR}/{filename}",
+        "--output", f"{OUTPUT_DIR}/{folder}",
     ]
     if no_llm:
         command.append("--no-llm")
@@ -34,7 +28,7 @@ def _run(no_llm: bool) -> bool:
 
 
 def task_generate():
-    """Сформировать описание через LLM (также запускается командой doit)."""
+    """Разбить весь файл требований и сформировать описания через LLM."""
     return {
         "actions": [(_run, [False])],
         "uptodate": [False],
@@ -55,5 +49,5 @@ def task_erase():
     """Служебная цель для doit clean."""
     return {
         "actions": None,
-        "clean": [(shutil.rmtree, [OUTPUT_DIR], {"ignore_errors": True})],
+        "clean": [(shutil.rmtree, ["outputs"], {"ignore_errors": True})],
     }
