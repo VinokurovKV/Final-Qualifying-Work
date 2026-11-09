@@ -2,26 +2,30 @@ import argparse
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import APIError
-
-from .requirements_to_description.pipeline import generate_descriptions
+from .terminal import interactive_menu, output_directory, run_generation
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Разбиение требований на тесты и формирование описаний.")
-    parser.add_argument("requirements_json", help="JSON со списком требований")
+    parser.add_argument("requirements_json", nargs="?", type=Path, help="JSON требований; без аргумента — меню")
     parser.add_argument(
-        "--output", default="outputs/requirements_to_description/generated", help="Каталог результатов"
+        "--output", type=Path, help="Каталог результатов (по умолчанию отдельный для каждого входного файла)"
     )
     parser.add_argument("--no-llm", action="store_true", help="Собрать черновик без API")
     args = parser.parse_args()
     load_dotenv()
 
-    try:
-        generate_descriptions(args.requirements_json, Path(args.output), no_llm=args.no_llm)
-    except APIError as error:
-        parser.exit(1, f"Ошибка сервиса LLM ({getattr(error, 'status_code', None) or 'соединение'}). "
-                    "Повторите запуск: сохранённые этапы будут использованы повторно.\n")
+    if args.requirements_json is None:
+        if args.output or args.no_llm:
+            parser.error("Для --output и --no-llm укажите файл требований.")
+        try:
+            interactive_menu()
+        except (ValueError, KeyboardInterrupt) as error:
+            parser.exit(1, f"{error}\n")
+        return
+    output = args.output or output_directory(args.requirements_json, args.no_llm)
+    if not run_generation(args.requirements_json, output, no_llm=args.no_llm):
+        parser.exit(1)
 
 
 if __name__ == "__main__":

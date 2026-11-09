@@ -6,10 +6,9 @@ import sys
 
 
 REQUIREMENTS = "requirements/GRE_RFC2784.json"
-OUTPUT_DIR = "outputs/requirements_to_description"
 
 DOIT_CONFIG = {
-    "default_tasks": ["generate"],
+    "default_tasks": ["menu"],
     "verbosity": 2,
     "backend": "json",
     "dep_file": ".venv/.doit.json",
@@ -17,14 +16,20 @@ DOIT_CONFIG = {
 
 
 def _run(no_llm: bool) -> bool:
-    folder = "draft" if no_llm else "generated"
-    command = [
-        sys.executable, "-B", "main.py", REQUIREMENTS,
-        "--output", f"{OUTPUT_DIR}/{folder}",
-    ]
+    command = [sys.executable, "-B", "main.py", REQUIREMENTS]
     if no_llm:
         command.append("--no-llm")
     return subprocess.run(command, check=False).returncode == 0
+
+
+def task_menu():
+    """Открыть интерактивное меню выбора файла и действия."""
+    return {
+        "actions": [[sys.executable, "-B", "main.py"]],
+        "uptodate": [False],
+        "task_dep": ["erase"],
+        "io": {"capture": False},
+    }
 
 
 def task_generate():

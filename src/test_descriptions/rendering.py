@@ -37,12 +37,14 @@ def render_readme(
     atomic_requirements: list[Requirement],
     code: str,
     short_description: str,
+    port_count: int = 4,
 ) -> str:
     tags = ", ".join(collect_tags(atomic_requirements))
     requirements_section = render_requirements_section(
         all_requirements,
         atomic_requirements,
     )
+    ports_description = "Соединён 1 порт" if port_count == 1 else f"Соединены {port_count} порта"
 
     return f"""# Код
 
@@ -60,7 +62,9 @@ def render_readme(
 
 # Топология
 
-TODO
+## Topo2_dev_{port_count}_ports
+Xinertel <-> DUT
+{ports_description}
 
 # Конфигурация устройства
 
