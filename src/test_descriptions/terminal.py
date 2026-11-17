@@ -1,6 +1,5 @@
-"""Меню и вывод в терминал. Логика генерации остаётся в pipeline."""
+"""Меню полного цикла генерации описаний тестов."""
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -15,6 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .requirements_to_description.pipeline import generate_descriptions
+from .requirements_to_description.junos_xml import DEFAULT_TEST_BASE_PATH
 from .requirements_to_description.requirements import load_requirements
 
 
@@ -22,10 +22,11 @@ console = Console()
 
 
 def output_directory(source: Path, no_llm: bool = False) -> Path:
-    return Path("outputs/requirements_to_description") / source.stem / ("draft" if no_llm else "generated")
+    directory = Path("outputs/requirements_to_description") / source.stem / "descriptions"
+    return directory / "draft" if no_llm else directory
 
 
-def run_generation(source: Path, output: Path, *, no_llm: bool = False, resume_only: bool = False) -> bool:
+def run_generation(source: Path, output: Path, *, no_llm: bool = False, base: Path = DEFAULT_TEST_BASE_PATH, resume_only: bool = False) -> bool:
     try:
         with Progress(SpinnerColumn(), TextColumn("{task.description}", markup=False), TimeElapsedColumn(),
                       console=console, transient=True) as progress:
@@ -41,12 +42,13 @@ def run_generation(source: Path, output: Path, *, no_llm: bool = False, resume_o
                 console.print(Text(message, style=style))
                 progress.reset(task, total=None, description=message)
 
-            generate_descriptions(source, output, no_llm=no_llm, resume_only=resume_only, notify=notify)
+            generate_descriptions(source, output, base_configuration_path=base, no_llm=no_llm,
+                                  resume_only=resume_only, notify=notify)
         console.print("Готово.", style="bold green")
         return True
     except APIError as error:
         code = getattr(error, "status_code", None) or "соединение"
-        console.print(Panel(Text(f"Ошибка сервиса LLM ({code}). Повторите запуск для продолжения."),
+        console.print(Panel(Text(f"Ошибка сервиса LLM ({code}). В меню можно продолжить незавершённый прогон."),
                             title="Ошибка LLM", border_style="red", style="bold red"))
     except ValidationError as error:
         details = "\n".join(f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
@@ -55,14 +57,14 @@ def run_generation(source: Path, output: Path, *, no_llm: bool = False, resume_o
     except (ValueError, OSError) as error:
         console.print(str(error), style="red", markup=False)
     except KeyboardInterrupt:
-        console.print("Остановлено. Готовые этапы сохранены; прогон можно продолжить.", style="yellow")
+        console.print("Остановлено. Сохранённые материалы доступны в каталоге результатов.", style="yellow")
     return False
 
 
 def interactive_menu() -> None:
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         raise ValueError("Меню требует интерактивного терминала. Используйте doit generate или doit draft.")
-    console.print(Panel("Генератор описаний тестов\n[dim]Требования → группы тестов → описания[/dim]",
+    console.print(Panel("Генератор описаний тестов\n[dim]Требования + базовая XML → тесты → Delta XML → README[/dim]",
                         border_style="cyan"))
     while True:
         files = sorted((path for path in Path("requirements").glob("*")
@@ -86,17 +88,23 @@ def interactive_menu() -> None:
             summary.add_row("Атомарные требования", str(len(atomic)))
             summary.add_row("Обязательные требования", str(sum(req.modifier.upper() == 'MUST' for req in atomic)))
             summary.add_row("Модель", os.getenv("LLM_MODEL") or "не настроена")
+            bases = sorted(Path("configurations").glob("*.xml"))
+            if not bases:
+                raise ValueError("В configurations/ нет базовой XML-конфигурации. Добавьте входной файл.")
+            base = bases[0] if len(bases) == 1 else questionary.select(
+                "Выберите базовую конфигурацию:",
+                choices=[questionary.Choice(path.name, value=path) for path in bases],
+            ).ask(kbi_msg="Выход.")
+            if base is None:
+                return
+            summary.add_row("Базовая конфигурация", base.name)
             console.print(summary)
-            output = output_directory(source)
-            manifest = output / "groups.json"
-            unfinished = manifest.exists() and json.loads(manifest.read_text()).get("status") == "in_progress"
         except (ValueError, OSError) as error:
             console.print(str(error), style="red", markup=False)
             continue
-        choices = [questionary.Choice("Сформировать описания через LLM", value="generate")]
-        if unfinished:
-            choices.append(questionary.Choice("Продолжить незавершённый прогон", value="resume"))
+        choices = [questionary.Choice("Сгенерировать описания и конфигурации через LLM", value="generate")]
         choices.extend([
+            questionary.Choice("Продолжить незавершённый прогон", value="resume"),
             questionary.Choice("Собрать черновики без LLM", value="draft"),
             questionary.Choice("Выбрать другой файл", value="back"),
             questionary.Choice("Выйти", value="exit"),
@@ -107,4 +115,4 @@ def interactive_menu() -> None:
         if action == "back":
             continue
         no_llm = action == "draft"
-        run_generation(source, output_directory(source, no_llm), no_llm=no_llm, resume_only=action == "resume")
+        run_generation(source, output_directory(source, no_llm), no_llm=no_llm, base=base, resume_only=action == "resume")

@@ -33,7 +33,7 @@ def task_menu():
 
 
 def task_generate():
-    """Разбить весь файл требований и сформировать описания через LLM."""
+    """Сгенерировать описания тестов, Delta XML и текст конфигурации через LLM."""
     return {
         "actions": [(_run, [False])],
         "uptodate": [False],
@@ -42,7 +42,7 @@ def task_generate():
 
 
 def task_draft():
-    """Собрать черновик без обращения к LLM."""
+    """Собрать черновики описаний без обращения к LLM."""
     return {
         "actions": [(_run, [True])],
         "uptodate": [False],

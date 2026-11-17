@@ -2,9 +2,10 @@
 .env
 __pycache__/
 *.egg-info/
-outputs/
 /requirements/
+/configurations/
 /docs/
 /outputs/
+/experiments/
 *.py[cod]
 .DS_Store

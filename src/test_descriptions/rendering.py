@@ -32,19 +32,39 @@ def render_requirements_section(
     return "\n".join(chunks).rstrip()
 
 
+def render_topology(port_count: int) -> str:
+    ports = "Соединён 1 порт" if port_count == 1 else f"Соединены {port_count} порта"
+    return f"# Топология\n\n## Topo2_dev_{port_count}_ports\nXinertel <-> DUT\n{ports}"
+
+
 def render_readme(
     all_requirements: list[Requirement],
     atomic_requirements: list[Requirement],
     code: str,
     short_description: str,
     port_count: int = 4,
+    delta_configuration: str | None = None,
+    *,
+    base_configuration_id: str | None = None,
+    configuration_limitations: list[str] | None = None,
+    configuration_is_template: bool = False,
 ) -> str:
     tags = ", ".join(collect_tags(atomic_requirements))
     requirements_section = render_requirements_section(
         all_requirements,
         atomic_requirements,
     )
-    ports_description = "Соединён 1 порт" if port_count == 1 else f"Соединены {port_count} порта"
+    topology = render_topology(port_count)
+    configuration = (
+        f"## Delta-конфигурация\n\n{delta_configuration}" if delta_configuration is not None else "TODO"
+    )
+    if base_configuration_id:
+        delta = configuration if delta_configuration is not None else "## Delta-конфигурация\n\nTODO"
+        configuration = f"## Базовая конфигурация\n\n{base_configuration_id}\n\n{delta}"
+    if configuration_is_template:
+        configuration += "\n\n**Конфигурация содержит параметры:** значения в базовой конфигурации или Delta XML требуют подстановки; конфигурация не готова к применению."
+    if configuration_limitations:
+        configuration += "\n\n### Ограничения проверки\n\n" + "\n".join(f"- {item}" for item in configuration_limitations)
 
     return f"""# Код
 
@@ -60,15 +80,11 @@ def render_readme(
 
 {requirements_section}
 
-# Топология
-
-## Topo2_dev_{port_count}_ports
-Xinertel <-> DUT
-{ports_description}
+{topology}
 
 # Конфигурация устройства
 
-TODO
+{configuration}
 
 # Тестовое воздействие
 
