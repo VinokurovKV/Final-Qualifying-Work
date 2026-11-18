@@ -46,8 +46,6 @@ def render_readme(
     delta_configuration: str | None = None,
     *,
     base_configuration_id: str | None = None,
-    configuration_limitations: list[str] | None = None,
-    configuration_is_template: bool = False,
 ) -> str:
     tags = ", ".join(collect_tags(atomic_requirements))
     requirements_section = render_requirements_section(
@@ -61,10 +59,6 @@ def render_readme(
     if base_configuration_id:
         delta = configuration if delta_configuration is not None else "## Delta-конфигурация\n\nTODO"
         configuration = f"## Базовая конфигурация\n\n{base_configuration_id}\n\n{delta}"
-    if configuration_is_template:
-        configuration += "\n\n**Конфигурация содержит параметры:** значения в базовой конфигурации или Delta XML требуют подстановки; конфигурация не готова к применению."
-    if configuration_limitations:
-        configuration += "\n\n### Ограничения проверки\n\n" + "\n".join(f"- {item}" for item in configuration_limitations)
 
     return f"""# Код
 

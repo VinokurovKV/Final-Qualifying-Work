@@ -58,10 +58,16 @@ def generate_device_configuration(
     requirements: list[Requirement], topology: str, parsed_configuration: dict,
     *, notify: Notify | None = None,
 ) -> DeviceConfiguration:
+    if not parsed_configuration["configuration_tree"]["children"]:
+        return DeviceConfiguration(delta_configuration="Изменения относительно базовой конфигурации не требуются.")
+    changes = {key: parsed_configuration[key] for key in (
+        "scope", "interfaces", "gre_tunnels", "routes", "arp", "parameters",
+        "port_assignments", "port_assignment_status", "configuration_tree",
+    )}
     prompt = CONFIGURATION_PROMPT_PATH.read_text(encoding="utf-8") + "\n\nВходные данные:\n" + json.dumps({
         "atomic_requirements": _requirements_data(requirements),
         "topology": topology,
-        "parsed_configuration": parsed_configuration,
+        "parsed_configuration": changes,
     }, ensure_ascii=False, indent=2)
     return DeviceConfiguration.model_validate_json(request_llm(
         prompt, stage="Конфигурация устройства", notify=notify, announce=False,

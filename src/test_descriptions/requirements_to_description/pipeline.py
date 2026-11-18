@@ -139,7 +139,7 @@ def generate_descriptions(
             description.port_count = minimum_ports
             report(f"Число соединений увеличено до {minimum_ports}: столько интерфейсов использует входная база.")
         readme_path = output / test["file"]
-        # Не заменяем готовый README промежуточным файлом без ограничений проверки.
+        # Не заменяем готовый текст конфигурации промежуточным TODO.
         if "device_configuration" not in test or not readme_path.exists():
             report(f"Проверка кода теста и сохранение Markdown: {test['file']}")
             readme_path.write_text(
@@ -155,6 +155,7 @@ def generate_descriptions(
     if no_llm:
         report("[4/4] Конфигурация устройства: пропущена в режиме без LLM.")
     else:
+        _save_validation_report(output, manifest)
         for index, test in enumerate(manifest["tests"], start=1):
             report(f"[4/4] Конфигурация устройства {index}/{len(grouping.tests)}: {test['code']}")
             selected = select_atomic_requirements(requirements, test["atomicRequirementCodes"])
@@ -177,6 +178,7 @@ def generate_descriptions(
                 except ValueError as error:
                     (output / json_file).write_text(json.dumps({"local_validation_passed": False, "error": str(error)},
                                                               ensure_ascii=False, indent=2), encoding="utf-8")
+                    _save_validation_report(output, manifest)
                     if attempt:
                         raise
                     (output / xml_file.replace(".delta.xml", ".delta.initial.xml")).write_text(xml, encoding="utf-8")
@@ -189,6 +191,7 @@ def generate_descriptions(
             test["delta_xml"] = xml
             test["configuration_artifacts"] = {"delta_xml": xml_file, "parsed_json": json_file}
             _save_manifest(manifest_path, manifest)
+            _save_validation_report(output, manifest)
             report("✓ Delta XML разобран локально; проверка поддержки на DUT не выполнялась.", "success")
             if "device_configuration" in test:
                 configuration = DeviceConfiguration.model_validate(test["device_configuration"])
@@ -200,14 +203,16 @@ def generate_descriptions(
             (output / test["file"]).write_text(render_readme(
                 requirements, selected, test["code"], test["short_description"], test["port_count"],
                 configuration.delta_configuration,
-                base_configuration_id=base["id"], configuration_limitations=parsed["limitations"],
-                configuration_is_template=parsed["is_template"],
+                base_configuration_id=base["id"],
             ), encoding="utf-8")
             test["device_configuration"] = configuration.model_dump()
             _save_manifest(manifest_path, manifest)
+            _save_validation_report(output, manifest)
             report(f"✓ Конфигурация {index}/{len(grouping.tests)} сохранена.", "success")
     manifest["status"] = "complete"
     _save_manifest(manifest_path, manifest)
+    if not no_llm:
+        _save_validation_report(output, manifest)
     report(f"Описания и groups.json сохранены: {output}")
 
 
@@ -215,3 +220,35 @@ def _save_manifest(path: Path, manifest: dict) -> None:
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def _save_validation_report(output: Path, manifest: dict) -> None:
+    """Служебная диагностика хранится отдельно от описаний тестов."""
+    lines = ["# Локальная проверка конфигураций", "",
+             f"Базовая конфигурация: {manifest['base_configuration']['id']}.", "",
+             "Проверяются XML и необходимые условия подготовки по объявленным базе и дельте. "
+             "Поддержка DUT, прохождение АТ и достаточность конкретного сценария не подтверждены.", ""]
+    for test in manifest["tests"]:
+        lines.extend([f"## {test.get('code', test['file'])}", ""])
+        artifact = output / Path(test["file"]).with_suffix(".configuration.json")
+        if not artifact.exists():
+            lines.extend(["Конфигурация ещё не проверена.", ""])
+            continue
+        data = json.loads(artifact.read_text(encoding="utf-8"))
+        if data.get("local_validation_passed") is False:
+            lines.extend(["Отклонено локальной проверкой:", "", "```text", data["error"], "```", ""])
+            continue
+        lines.extend(["Локальная проверка XML пройдена.", "",
+                      "Текст конфигурации: " + ("сформирован." if "device_configuration" in test else "ожидается."), ""])
+        preparation = data.get("preparation_check", {})
+        if preparation.get("status") == "passed_necessary_conditions":
+            lines.extend(["Необходимые условия профиля IPv4 GRE проверены по базе и дельте.", ""])
+        else:
+            lines.extend(["Проверка необходимых условий IPv4 GRE к этим АТ не применялась.", ""])
+        if data.get("is_template"):
+            lines.extend(["База или дельта содержит именованные параметры; значения и адресные связи требуют проверки.", ""])
+        limitations = data.get("limitations", [])
+        if limitations:
+            lines.extend(["Ограничения:", "", *[f"- {item}" for item in limitations], ""])
+        lines.extend([f"Подробности: [{artifact.name}]({artifact.name}).", ""])
+    (output / "validation_report.md").write_text("\n".join(lines), encoding="utf-8")

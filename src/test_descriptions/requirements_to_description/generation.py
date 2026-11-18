@@ -44,8 +44,14 @@ def request_llm(prompt: str, *, stage: str, notify: Notify | None = None, announ
     report = notify or (lambda message, level: print(message, flush=True))
     if not base_url or not model:
         raise ValueError("Не заданы LLM_BASE_URL и LLM_MODEL.")
-    if urlparse(base_url).hostname == "openrouter.ai" and not api_key:
-        raise ValueError("Для OpenRouter нужен API-ключ. Создайте его на https://openrouter.ai/keys "
+    providers = {
+        "openrouter.ai": ("OpenRouter", "https://openrouter.ai/keys"),
+        "api.deepseek.com": ("DeepSeek", "https://platform.deepseek.com/api_keys"),
+    }
+    provider = providers.get(urlparse(base_url).hostname)
+    if provider and not api_key:
+        name, key_url = provider
+        raise ValueError(f"Для {name} нужен API-ключ. Создайте его на {key_url} "
                          "и укажите в .env: LLM_API_KEY=ваш_ключ.")
 
     system_prompt = system_instructions
