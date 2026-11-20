@@ -1,0 +1,26 @@
+<rpc>
+  <edit-config>
+      <target>
+          <candidate />
+      </target>
+      <default-operation>merge</default-operation>
+      <config>
+{{CONFIGURATION}}
+      </config>
+  </edit-config>
+</rpc>
+<rpc>
+    <get-configuration compare="rollback" database="candidate" />
+</rpc>
+<rpc>
+    <validate>
+        <source>
+            <candidate/>
+        </source>
+    </validate>
+</rpc>
+<rpc>
+    <commit>
+        <confirmed/>
+    </commit>
+</rpc>

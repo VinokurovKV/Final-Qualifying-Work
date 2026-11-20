@@ -5,7 +5,7 @@ __pycache__/
 /requirements/
 /configurations/
 /docs/
-/outputs/
+/results/
 /experiments/
 *.py[cod]
 .DS_Store

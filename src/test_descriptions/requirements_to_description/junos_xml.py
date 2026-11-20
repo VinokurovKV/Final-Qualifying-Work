@@ -4,6 +4,7 @@ import copy
 import hashlib
 import ipaddress
 import re
+import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from pathlib import Path
 DEFAULT_TEST_BASE_PATH = Path(__file__).resolve().parents[3] / "configurations/BASE_RFC2784.xml"
 PARAMETER = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 NETCONF_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
+BASE_RPC_TEMPLATE = Path(__file__).with_name("prompts") / "base_configuration_rpc.xml"
 
 # Это проверенный локальный профиль, не XSD всей Junos и не подтверждение поддержки DUT.
 CHILDREN = {
@@ -49,6 +51,19 @@ def _normalized(root: ET.Element) -> ET.Element:
     for node in root.iter():
         node.tag = _local(node.tag)
     return root
+
+
+def wrap_base_configuration(xml: str) -> str:
+    """Формат файла системы: последовательность RPC, без их выполнения."""
+    if _local(_parse(xml).tag) != "configuration":
+        raise ValueError("Для обёртки нужен один блок configuration.")
+    template = BASE_RPC_TEMPLATE.read_text(encoding="utf-8")
+    if template.count("{{CONFIGURATION}}") != 1:
+        raise ValueError("В шаблоне RPC должен быть один маркер CONFIGURATION.")
+    fragment = re.sub(r"^\s*<\?xml[^?]*\?>", "", xml, count=1).strip()
+    result = template.replace("{{CONFIGURATION}}", textwrap.indent(fragment, " " * 10))
+    _parse("<documents>" + result + "</documents>")
+    return result
 
 
 def load_base_configuration(path: Path = DEFAULT_TEST_BASE_PATH) -> dict:

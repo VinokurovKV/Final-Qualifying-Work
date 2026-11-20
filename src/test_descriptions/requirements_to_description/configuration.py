@@ -35,6 +35,15 @@ def _requirements_data(requirements: list[Requirement]) -> list[dict]:
     ]
 
 
+def _present_values(value):
+    """Не подсказываем модели перечислять отсутствующие настройки и служебные пустые поля."""
+    if isinstance(value, dict):
+        return {key: item for key, raw in value.items() if (item := _present_values(raw)) is not None} or None
+    if isinstance(value, list):
+        return [item for raw in value if (item := _present_values(raw)) is not None] or None
+    return None if value is None or value is False or value == "" else value
+
+
 def generate_delta_xml(requirements: list[Requirement], topology: str, base: dict,
                        *, notify: Notify | None = None, previous_xml: str | None = None,
                        validation_error: str | None = None) -> str:
@@ -64,6 +73,9 @@ def generate_device_configuration(
         "scope", "interfaces", "gre_tunnels", "routes", "arp", "parameters",
         "port_assignments", "port_assignment_status", "configuration_tree",
     )}
+    if not changes["port_assignments"]:
+        del changes["port_assignment_status"]
+    changes = _present_values(changes)
     prompt = CONFIGURATION_PROMPT_PATH.read_text(encoding="utf-8") + "\n\nВходные данные:\n" + json.dumps({
         "atomic_requirements": _requirements_data(requirements),
         "topology": topology,

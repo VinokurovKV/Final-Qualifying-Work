@@ -33,7 +33,7 @@ def task_menu():
 
 
 def task_generate():
-    """Сгенерировать описания тестов, Delta XML и текст конфигурации через LLM."""
+    """Сгенерировать общую базу RFC, описания тестов и Delta XML через LLM."""
     return {
         "actions": [(_run, [False])],
         "uptodate": [False],
@@ -54,5 +54,5 @@ def task_erase():
     """Служебная цель для doit clean."""
     return {
         "actions": None,
-        "clean": [(shutil.rmtree, ["outputs"], {"ignore_errors": True})],
+        "clean": [(shutil.rmtree, ["results"], {"ignore_errors": True})],
     }

@@ -34,14 +34,22 @@ def group_requirements(requirements: list[Requirement], *, notify: Notify | None
               "context_requirements": [req.model_dump() for req in requirements if not req.is_atomic]}
     prompt = (PROMPTS_DIR / "grouping.md").read_text(encoding="utf-8") + json.dumps(inputs, ensure_ascii=False)
     system = (PROMPTS_DIR / "grouping_system.md").read_text(encoding="utf-8")
-    if output is not None:
-        (output / "grouping.prompt.md").write_text(prompt, encoding="utf-8")
-        (output / "grouping.system.md").write_text(system, encoding="utf-8")
+    diagnostic = {"prompt": prompt, "system": system}
+
+    def save() -> None:
+        if output is not None:
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "grouping.json").write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def metadata(data: dict) -> None:
+        diagnostic["response_metadata"] = data
+        save()
+
+    save()
     raw = request_llm(prompt, stage="Разбиение требований", notify=notify, system_instructions=system,
-                      on_response=(lambda data: (output / "grouping.response_metadata.json").write_text(
-                          json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")) if output else None)
-    if output is not None:
-        (output / "grouping.response.json").write_text(raw, encoding="utf-8")
+                      on_response=metadata)
+    diagnostic["response"] = raw
+    save()
     return Grouping.model_validate_json(raw)
 
 
