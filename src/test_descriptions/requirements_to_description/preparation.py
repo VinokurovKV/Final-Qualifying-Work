@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 from .junos_xml import KEYED, NETCONF_NS, PARAMETER, _normalized, _parse
 from .requirements import Requirement
+from .addressing import check_addressing
 
 
 def declared_configuration(base_xml: str, delta_xml: str) -> ET.Element:
@@ -94,10 +95,13 @@ def check_preparation(base: dict, delta_xml: str, requirements: list[Requirement
                       "нужна пригодная подключённая сеть GRE либо маршрут через логический GRE-интерфейс.")
     if issues:
         raise ValueError("Не выполнены необходимые условия подготовки IPv4 GRE:\n- " + "\n- ".join(issues))
+    addressing = check_addressing(view, base["available_physical_interfaces"])
     return {
-        "status": "passed_necessary_conditions", "profile": "ipv4_gre",
+        "status": "pending_address_bindings" if addressing["status"] == "pending_parameters"
+                  else "passed_necessary_conditions", "profile": "ipv4_gre",
         "scope": "declared_base_plus_delta", "requires_encapsulation": needs_encapsulation,
         "gre_units": [name for name, _ in units], "encapsulation_paths": encapsulation_paths,
         "address_bindings_require_verification": parameterized_path or bool(PARAMETER.search(ET.tostring(view, encoding="unicode"))),
+        "addressing": addressing,
         "full_scenario_sufficiency_confirmed": False, "device_validation_performed": False,
     }

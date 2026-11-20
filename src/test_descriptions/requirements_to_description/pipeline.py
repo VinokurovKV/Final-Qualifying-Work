@@ -51,7 +51,7 @@ def generate_descriptions(
         requirements_path.read_bytes(), FORMAT_PATH.read_bytes(),
         *[Path(__file__).with_name(name).read_bytes() for name in (
             "pipeline.py", "generation.py", "grouping.py", "configuration.py",
-            "junos_xml.py", "preparation.py", "base_configuration.py",
+            "junos_xml.py", "preparation.py", "base_configuration.py", "addressing.py",
         )],
         base_configuration_path.read_bytes() if base_configuration_path is not None and not no_llm else b"",
         standard.read_bytes() if standard is not None else b"",
@@ -165,9 +165,9 @@ def generate_descriptions(
         if description.code in test_codes:
             raise ValueError(f"Повторяется код теста: {description.code}")
         test_codes.add(description.code)
-        if description.port_count < minimum_ports:
+        if base is not None and description.port_count != minimum_ports:
             description.port_count = minimum_ports
-            report(f"Число соединений увеличено до {minimum_ports}: столько интерфейсов использует входная база.")
+            report(f"Число соединений согласовано с общей базой: {minimum_ports}.")
         readme_path = output / test["file"]
         # Не заменяем готовый текст конфигурации промежуточным TODO.
         if "device_configuration" not in test or not readme_path.exists():
@@ -288,8 +288,15 @@ def _save_validation_report(output: Path, manifest: dict) -> None:
         preparation = data.get("preparation_check", {})
         if preparation.get("status") == "passed_necessary_conditions":
             lines.extend(["Необходимые условия профиля IPv4 GRE проверены по базе и дельте.", ""])
+        elif preparation.get("status") == "pending_address_bindings":
+            lines.extend(["Структурная подготовка IPv4 GRE проверена; адресные связи зависят от параметров.",
+                          "Достижимость GRE endpoint до подстановки адресов не подтверждена.", ""])
         else:
             lines.extend(["Проверка необходимых условий IPv4 GRE к этим АТ не применялась.", ""])
+        pending = [check["condition"] for check in preparation.get("addressing", {}).get("checks", [])
+                   if check["status"] == "pending_parameters"]
+        if pending:
+            lines.extend(["Условия для адресных параметров:", "", *[f"- {condition}" for condition in pending], ""])
         if data.get("is_template"):
             lines.extend(["База или дельта содержит именованные параметры; значения и адресные связи требуют проверки.", ""])
         limitations = data.get("limitations", [])

@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 from pypdf import PdfReader
 
 from .generation import PROMPTS_DIR, Notify, request_llm
-from .junos_xml import parse_base_xml, wrap_base_configuration
+from .junos_xml import _normalized, _parse, parse_base_xml, wrap_base_configuration
 from .requirements import load_requirements
+from .addressing import check_addressing
 
 
 def _save(path: Path, value: dict) -> None:
@@ -105,6 +106,7 @@ def generate_base_configuration(source: Path, rfc: Path, output: Path, *, notify
                 parsed = parse_base_xml(raw, device)
                 if not parsed["interfaces"]:
                     raise ValueError("База не содержит интерфейсов.")
+                parsed["addressing_check"] = check_addressing(_normalized(_parse(raw)), device["available_physical_interfaces"])
             except ValueError as error:
                 attempts[-1]["validation_error"] = str(error)
                 _save(diagnostic_path, diagnostic)
