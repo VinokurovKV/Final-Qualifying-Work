@@ -33,7 +33,7 @@ def task_menu():
 
 
 def task_generate():
-    """Сгенерировать общую базу RFC, описания тестов и Delta XML через LLM."""
+    """Сгенерировать базу RFC, описания, Delta XML и тестовое воздействие через LLM."""
     return {
         "actions": [(_run, [False])],
         "uptodate": [False],

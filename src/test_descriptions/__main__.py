@@ -6,7 +6,7 @@ from .terminal import interactive_menu, output_directory, run_generation
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Генерация базовой XML, описаний тестов и Delta XML по требованиям и RFC.")
+    parser = argparse.ArgumentParser(description="Генерация описаний, конфигураций и потоков Xinertel по требованиям и RFC.")
     parser.add_argument("requirements_json", nargs="?", type=Path, help="JSON требований; без аргумента — меню")
     parser.add_argument(
         "--output", type=Path, help="Родительский каталог результатов; каждый запуск создаёт отдельный run_…"

@@ -46,6 +46,8 @@ def render_readme(
     delta_configuration: str | None = None,
     *,
     base_configuration_id: str | None = None,
+    test_stimulus: str | None = None,
+    additional_information: str | None = None,
 ) -> str:
     tags = ", ".join(collect_tags(atomic_requirements))
     requirements_section = render_requirements_section(
@@ -82,7 +84,7 @@ def render_readme(
 
 # Тестовое воздействие
 
-TODO
+{test_stimulus if test_stimulus is not None else "TODO"}
 
 # Критерий прохождения теста
 
@@ -90,5 +92,5 @@ TODO
 
 # Дополнительная информация
 
-TODO
+{additional_information if additional_information is not None else "TODO"}
 """

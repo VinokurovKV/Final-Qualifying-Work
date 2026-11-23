@@ -17,6 +17,7 @@ from .grouping import Grouping, TestGroup, group_requirements, validate_grouping
 from .requirements import load_requirements, select_atomic_requirements
 from .junos_xml import load_base_configuration, parse_base_xml, parse_generated_delta, wrap_base_configuration
 from .preparation import check_preparation
+from .stimulus import TestStimulus, generate_test_stimulus, render_stimulus, render_stimulus_parameters
 
 
 def generate_descriptions(
@@ -39,7 +40,7 @@ def generate_descriptions(
         else:
             print(message, flush=True)
 
-    report(f"[1/5] Чтение и проверка требований: {requirements_path}")
+    report(f"[1/6] Чтение и проверка требований: {requirements_path}")
     requirements = load_requirements(requirements_path)
     atomic = [req for req in requirements if req.is_atomic]
     if not atomic:
@@ -51,7 +52,7 @@ def generate_descriptions(
         requirements_path.read_bytes(), FORMAT_PATH.read_bytes(),
         *[Path(__file__).with_name(name).read_bytes() for name in (
             "pipeline.py", "generation.py", "grouping.py", "configuration.py",
-            "junos_xml.py", "preparation.py", "base_configuration.py", "addressing.py",
+            "junos_xml.py", "preparation.py", "base_configuration.py", "addressing.py", "stimulus.py",
         )],
         base_configuration_path.read_bytes() if base_configuration_path is not None and not no_llm else b"",
         standard.read_bytes() if standard is not None else b"",
@@ -92,9 +93,9 @@ def generate_descriptions(
     base = None
     minimum_ports = 1
     if no_llm:
-        report("[2/5] Общая базовая конфигурация: пропущена в режиме без LLM.")
+        report("[2/6] Общая базовая конфигурация: пропущена в режиме без LLM.")
     else:
-        report("[2/5] Общая базовая конфигурация RFC...")
+        report("[2/6] Общая базовая конфигурация RFC...")
         if base_configuration_path is None:
             diagnostic_path = output / "diagnostics/base_generation.json"
             if diagnostic_path.exists() and json.loads(diagnostic_path.read_text()).get("status") == "locally_checked":
@@ -128,9 +129,9 @@ def generate_descriptions(
     if manifest["tests"]:
         grouping = Grouping(tests=[TestGroup(atomicRequirementCodes=test["atomicRequirementCodes"])
                                   for test in manifest["tests"]])
-        report("[3/5] Восстановление разбиения незавершённого прогона...")
+        report("[3/6] Восстановление разбиения незавершённого прогона...")
     else:
-        report(f"[3/5] Разбиение {len(atomic)} атомарных требований на тесты...")
+        report(f"[3/6] Разбиение {len(atomic)} атомарных требований на тесты...")
         grouping = (
             Grouping(tests=[TestGroup(atomicRequirementCodes=[req.code]) for req in atomic])
             if no_llm else group_requirements(requirements, notify=report, output=output / "diagnostics")
@@ -150,7 +151,7 @@ def generate_descriptions(
     test_codes = set()
     for index, (group, test) in enumerate(zip(grouping.tests, manifest["tests"]), start=1):
         selected = select_atomic_requirements(requirements, group.atomicRequirementCodes)
-        report(f"[4/5] Описание теста {index}/{len(grouping.tests)}: "
+        report(f"[4/6] Описание теста {index}/{len(grouping.tests)}: "
                + ", ".join(group.atomicRequirementCodes))
         if "code" in test:
             description = TestDescription(
@@ -175,7 +176,11 @@ def generate_descriptions(
             readme_path.write_text(
                 render_readme(requirements, selected, description.code, description.short_description, description.port_count,
                               test.get("device_configuration", {}).get("delta_configuration"),
-                              base_configuration_id=base["id"] if base else None),
+                              base_configuration_id=base["id"] if base else None,
+                              test_stimulus=render_stimulus(TestStimulus.model_validate(test["test_stimulus"]), test["port_count"])
+                              if "test_stimulus" in test else None,
+                              additional_information=render_stimulus_parameters(TestStimulus.model_validate(test["test_stimulus"]))
+                              if "test_stimulus" in test else None),
                 encoding="utf-8"
             )
         test.update(description.model_dump())
@@ -183,12 +188,12 @@ def generate_descriptions(
         report(f"✓ Описание {index}/{len(grouping.tests)} сохранено: {description.code}", "success")
     report("", "separator")
     if no_llm:
-        report("[5/5] Конфигурация устройства: пропущена в режиме без LLM.")
+        report("[5/6] Конфигурация устройства: пропущена в режиме без LLM.")
     else:
         (output / "diagnostics").mkdir(exist_ok=True)
         _save_validation_report(output, manifest)
         for index, test in enumerate(manifest["tests"], start=1):
-            report(f"[5/5] Конфигурация устройства {index}/{len(grouping.tests)}: {test['code']}")
+            report(f"[5/6] Конфигурация устройства {index}/{len(grouping.tests)}: {test['code']}")
             selected = select_atomic_requirements(requirements, test["atomicRequirementCodes"])
             topology = render_topology(test["port_count"])
             if "delta_xml" in test:
@@ -235,11 +240,44 @@ def generate_descriptions(
                 requirements, selected, test["code"], test["short_description"], test["port_count"],
                 configuration.delta_configuration,
                 base_configuration_id=base["id"],
+                test_stimulus=render_stimulus(TestStimulus.model_validate(test["test_stimulus"]), test["port_count"])
+                if "test_stimulus" in test else None,
+                additional_information=render_stimulus_parameters(TestStimulus.model_validate(test["test_stimulus"]))
+                if "test_stimulus" in test else None,
             ), encoding="utf-8")
             test["device_configuration"] = configuration.model_dump()
             _save_manifest(manifest_path, manifest)
             _save_validation_report(output, manifest)
             report(f"✓ Конфигурация {index}/{len(grouping.tests)} сохранена.", "success")
+    report("", "separator")
+    if no_llm:
+        report("[6/6] Тестовое воздействие: пропущено в режиме без LLM.")
+    else:
+        for index, test in enumerate(manifest["tests"], start=1):
+            report(f"[6/6] Тестовое воздействие {index}/{len(manifest['tests'])}: {test['code']}")
+            selected = select_atomic_requirements(requirements, test["atomicRequirementCodes"])
+            if "test_stimulus" in test:
+                stimulus = TestStimulus.model_validate(test["test_stimulus"])
+                report("Уже сохранено, запрос LLM пропущен.")
+            else:
+                stimulus = generate_test_stimulus(
+                    selected, render_topology(test["port_count"]), base, test["delta_xml"], test["port_count"],
+                    notify=report, output=output / "diagnostics" / Path(test["file"]).with_suffix(".stimulus.json"),
+                )
+            test["test_stimulus"] = stimulus.model_dump()
+            test["stimulus_status"] = "needs_review" if stimulus.unresolved_requirements else "generated"
+            _save_manifest(manifest_path, manifest)
+            (output / test["file"]).write_text(render_readme(
+                requirements, selected, test["code"], test["short_description"], test["port_count"],
+                test["device_configuration"]["delta_configuration"], base_configuration_id=base["id"],
+                test_stimulus=render_stimulus(stimulus, test["port_count"]),
+                additional_information=render_stimulus_parameters(stimulus),
+            ), encoding="utf-8")
+            _save_validation_report(output, manifest)
+            if stimulus.unresolved_requirements:
+                report(f"Воздействие {index}/{len(manifest['tests'])} сохранено; есть АТ, требующие уточнения сценария.", "error")
+            else:
+                report(f"✓ Воздействие {index}/{len(manifest['tests'])} сохранено.", "success")
     manifest["status"] = "complete"
     _save_manifest(manifest_path, manifest)
     if not no_llm:
@@ -285,6 +323,12 @@ def _save_validation_report(output: Path, manifest: dict) -> None:
             continue
         lines.extend(["Локальная проверка XML пройдена.", "",
                       "Текст конфигурации: " + ("сформирован." if "device_configuration" in test else "ожидается."), ""])
+        lines.extend(["Тестовое воздействие: " + (
+            "есть неразработанные АТ." if test.get("stimulus_status") == "needs_review" else
+            "сформировано; проверены формат, трассировка АТ и соответствие портов; смысловое покрытие не подтверждено."
+            if "test_stimulus" in test else "ожидается."), ""])
+        for item in test.get("test_stimulus", {}).get("unresolved_requirements", []):
+            lines.extend([f"- {item['code']}: {item['reason']}", ""])
         preparation = data.get("preparation_check", {})
         if preparation.get("status") == "passed_necessary_conditions":
             lines.extend(["Необходимые условия профиля IPv4 GRE проверены по базе и дельте.", ""])
